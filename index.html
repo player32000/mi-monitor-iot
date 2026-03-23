@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Mi Monitor Industrial</title>
+    <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+    <style>
+        body { font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #f0f2f5; }
+        .card { background: white; padding: 2rem; border-radius: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); text-align: center; width: 300px; }
+        h1 { color: #1a73e8; font-size: 1.2rem; }
+        #dato { font-size: 3rem; font-weight: bold; color: #333; margin: 1rem 0; }
+        .status { font-size: 0.8rem; color: green; }
+    </style>
+</head>
+<body>
+
+<div class="card">
+    <h1>NIVEL DEL TANQUE</h1>
+    <div id="dato">0%</div>
+    <div class="status" id="status">Conectando...</div>
+</div>
+
+<script>
+    // CAMBIA ESTO por el mismo que pusiste en el ESP32
+    const TOPIC = "kunana3001/sensor1"; 
+    
+    // Conexión vía WebSockets (Puerto 8000 para web)
+    const client = mqtt.connect('wss://broker.hivemq.com:8000/mqtt');
+
+    client.on('connect', () => {
+        document.getElementById('status').innerText = "● En Línea";
+        client.subscribe(TOPIC);
+    });
+
+    client.on('message', (topic, message) => {
+        const obj = JSON.parse(message.toString());
+        document.getElementById('dato').innerText = Math.round(obj.valor) + "%";
+        
+        // OPCIONAL: Guardar en LocalStorage (Plan Básico)
+        let historial = JSON.parse(localStorage.getItem('datos_sensor') || "[]");
+        historial.push({t: new Date().toLocaleTimeString(), v: obj.valor});
+        if(historial.length > 10) historial.shift(); // Solo los últimos 10
+        localStorage.setItem('datos_sensor', JSON.stringify(historial));
+    });
+</script>
+
+</body>
+</html>
