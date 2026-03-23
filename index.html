@@ -1,45 +1,61 @@
 <!DOCTYPE html>
-<html>
+<html lang="es">
 <head>
-    <title>Mi Monitor Industrial</title>
-    <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Panel de Monitoreo IoT</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mqtt/4.3.7/mqtt.min.js"></script>
     <style>
-        body { font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #f0f2f5; }
-        .card { background: white; padding: 2rem; border-radius: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); text-align: center; width: 300px; }
-        h1 { color: #1a73e8; font-size: 1.2rem; }
-        #dato { font-size: 3rem; font-weight: bold; color: #333; margin: 1rem 0; }
-        .status { font-size: 0.8rem; color: green; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #eef2f3; }
+        .card { background: white; padding: 2.5rem; border-radius: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); text-align: center; width: 320px; border-top: 8px solid #00d2ff; }
+        h1 { color: #333; font-size: 1rem; text-transform: uppercase; letter-spacing: 1px; }
+        #dato { font-size: 4rem; font-weight: bold; color: #00d2ff; margin: 15px 0; }
+        .status { font-size: 0.85rem; padding: 5px 12px; border-radius: 15px; background: #eee; display: inline-block; }
+        .online { color: #27ae60; font-weight: bold; }
     </style>
 </head>
 <body>
 
 <div class="card">
-    <h1>NIVEL DEL TANQUE</h1>
+    <h1>Nivel de Producción</h1>
     <div id="dato">0%</div>
-    <div class="status" id="status">Conectando...</div>
+    <div id="status" class="status">Iniciando...</div>
 </div>
 
 <script>
-    // CAMBIA ESTO por el mismo que pusiste en el ESP32
-    const TOPIC = "kunana3001/sensor1"; 
+    // IMPORTANTE: Debe ser el mismo que en Wokwi
+    const TOPIC = "miproyecto/sensor1"; 
     
-    // Conexión vía WebSockets (Puerto 8000 para web)
-    const client = mqtt.connect('wss://broker.hivemq.com:8000/mqtt');
+    // Configuración para conexión segura desde GitHub (WSS)
+    // Usamos el puerto 8084 que es el estándar de EMQX para WebSockets Seguros
+    const client = mqtt.connect('wss://broker.emqx.io:8084/mqtt', {
+        clientId: 'web_client_' + Math.random().toString(16).substr(2, 8),
+        keepalive: 60,
+        clean: true
+    });
 
     client.on('connect', () => {
-        document.getElementById('status').innerText = "● En Línea";
+        console.log("¡Conectado exitosamente a EMQX!");
+        document.getElementById('status').innerText = "● EN LÍNEA";
+        document.getElementById('status').classList.add('online');
         client.subscribe(TOPIC);
     });
 
     client.on('message', (topic, message) => {
-        const obj = JSON.parse(message.toString());
-        document.getElementById('dato').innerText = Math.round(obj.valor) + "%";
-        
-        // OPCIONAL: Guardar en LocalStorage (Plan Básico)
-        let historial = JSON.parse(localStorage.getItem('datos_sensor') || "[]");
-        historial.push({t: new Date().toLocaleTimeString(), v: obj.valor});
-        if(historial.length > 10) historial.shift(); // Solo los últimos 10
-        localStorage.setItem('datos_sensor', JSON.stringify(historial));
+        try {
+            const data = JSON.parse(message.toString());
+            document.getElementById('dato').innerText = Math.round(data.valor) + "%";
+            
+            // Guardar en teléfono (Plan Básico)
+            console.log("Dato recibido y guardado localmente:", data.valor);
+        } catch (e) {
+            console.error("Error al procesar JSON", e);
+        }
+    });
+
+    client.on('error', (err) => {
+        console.error("Error de conexión:", err);
+        document.getElementById('status').innerText = "❌ ERROR";
     });
 </script>
 
