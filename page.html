@@ -3,61 +3,188 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Panel de Monitoreo IoT</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/mqtt/4.3.7/mqtt.min.js"></script>
+    <title>TecSur - Panel de Telemetría</title>
+    <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
     <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #eef2f3; }
-        .card { background: white; padding: 2.5rem; border-radius: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); text-align: center; width: 320px; border-top: 8px solid #00d2ff; }
-        h1 { color: #333; font-size: 1rem; text-transform: uppercase; letter-spacing: 1px; }
-        #dato { font-size: 4rem; font-weight: bold; color: #00d2ff; margin: 15px 0; }
-        .status { font-size: 0.85rem; padding: 5px 12px; border-radius: 15px; background: #eee; display: inline-block; }
-        .online { color: #27ae60; font-weight: bold; }
+        :root {
+            --bg-color: #f0f2f5;
+            --primary-color: #1a2a3a;
+            --accent-color: #00a8ff;
+            --text-color: #2f3640;
+            --card-bg: #ffffff;
+        }
+
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            background-color: var(--bg-color);
+            margin: 0;
+            display: flex;
+            height: 100vh;
+        }
+
+        /* Sidebar Dinámico */
+        nav {
+            width: 260px;
+            background-color: var(--primary-color);
+            color: white;
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+            box-shadow: 2px 0 5px rgba(0,0,0,0.1);
+        }
+
+        nav h2 { font-size: 1.1rem; border-bottom: 1px solid #34495e; padding-bottom: 15px; }
+
+        .nav-btn {
+            background: none; border: none; color: #dcdde1;
+            padding: 12px; text-align: left; cursor: pointer;
+            transition: 0.3s; border-radius: 6px; margin-bottom: 8px;
+        }
+
+        .nav-btn:hover, .nav-btn.active {
+            background-color: var(--accent-color); color: white;
+        }
+
+        /* Área Principal */
+        main { flex-grow: 1; padding: 40px; overflow-y: auto; }
+        
+        .tab-content { display: none; }
+        .tab-content.active { display: block; animation: fadeIn 0.4s; }
+
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+        /* Tarjetas de Datos */
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 25px;
+            margin-top: 20px;
+        }
+
+        .card {
+            background: var(--card-bg);
+            padding: 25px;
+            border-radius: 12px;
+            box-shadow: 0 8px 15px rgba(0,0,0,0.05);
+            border-top: 4px solid var(--accent-color);
+        }
+
+        .card h3 { margin: 0; color: #7f8c8d; font-size: 0.85rem; text-transform: uppercase; }
+        .card p { font-size: 2rem; font-weight: 700; margin: 15px 0; color: var(--primary-color); }
+
+        .user-badge {
+            background: #27ae60; color: white; padding: 5px 10px;
+            border-radius: 20px; font-size: 0.8rem; margin-top: 10px; display: inline-block;
+        }
     </style>
 </head>
 <body>
 
-<div class="card">
-    <h1>Nivel de Producción</h1>
-    <div id="dato">0%</div>
-    <div id="status" class="status">Iniciando...</div>
-</div>
+    <nav id="sidebar">
+        <h2>📡 TECSUR GATEWAY</h2>
+        <div id="user-info" style="margin-bottom: 20px; font-size: 0.8rem; color: #95a5a6;"></div>
+        <button class="nav-btn active" onclick="openTab(event, 'inicio')">Inicio</button>
+        </nav>
 
-<script>
-    // IMPORTANTE: Debe ser el mismo que en Wokwi
-    const TOPIC = "miproyecto/sensor1"; 
-    
-    // Configuración para conexión segura desde GitHub (WSS)
-    // Usamos el puerto 8084 que es el estándar de EMQX para WebSockets Seguros
-    const client = mqtt.connect('wss://broker.emqx.io:8084/mqtt', {
-        clientId: 'web_client_' + Math.random().toString(16).substr(2, 8),
-        keepalive: 60,
-        clean: true
-    });
+    <main id="main-content">
+        <div id="inicio" class="tab-content active">
+            <h1>Panel General</h1>
+            <p>Esperando conexión de dispositivos para este usuario...</p>
+            <div class="grid" id="resumen-grid">
+                <div class="card">
+                    <h3>Dispositivos Online</h3>
+                    <p id="counter">0</p>
+                    <span id="mqtt-status">Conectando al Broker...</span>
+                </div>
+            </div>
+        </div>
+        </main>
 
-    client.on('connect', () => {
-        console.log("¡Conectado exitosamente a EMQX!");
-        document.getElementById('status').innerText = "● EN LÍNEA";
-        document.getElementById('status').classList.add('online');
-        client.subscribe(TOPIC);
-    });
+    <script>
+        // 1. CONFIGURACIÓN DE SESIÓN
+        const USUARIO_ID = new URLSearchParams(window.location.search).get('user') || prompt("Ingrese su ID de Usuario (ej: user_77):");
+        document.getElementById('user-info').innerText = "Sesión: " + USUARIO_ID;
+        
+        // Estructura: tecsur / {usuario} / {dispositivo} / {tipo_mensaje}
+        const TOPIC_RAIZ = `tecsur/${USUARIO_ID}`;
 
-    client.on('message', (topic, message) => {
-        try {
+        // 2. CONEXIÓN MQTT (Broker Público)
+        const client = mqtt.connect('wss://broker.emqx.io:8084/mqtt');
+        let dispositivos = {};
+
+        client.on('connect', () => {
+            document.getElementById('mqtt-status').innerText = "🟢 Online - Escuchando...";
+            client.subscribe(`${TOPIC_RAIZ}/+/anuncio`);
+            client.subscribe(`${TOPIC_RAIZ}/+/telemetria`);
+        });
+
+        client.on('message', (topic, message) => {
             const data = JSON.parse(message.toString());
-            document.getElementById('dato').innerText = Math.round(data.valor) + "%";
+            const partes = topic.split('/');
+            const dispId = partes[2]; 
+
+            // Si es un anuncio, creamos el dispositivo en la interfaz
+            if (topic.endsWith('anuncio')) {
+                if (!dispositivos[dispId]) {
+                    dispositivos[dispId] = { nombre: data.nombre, id: dispId };
+                    crearNuevaPestaña(dispId, data.nombre);
+                }
+            }
+
+            // Si es telemetría, actualizamos los datos en pantalla
+            if (topic.endsWith('telemetria')) {
+                actualizarDatosUI(dispId, data);
+            }
+        });
+
+        // 3. LÓGICA DE INTERFAZ DINÁMICA
+        function crearNuevaPestaña(id, nombre) {
+            // Añadir botón al menú
+            const nav = document.getElementById('sidebar');
+            const btn = document.createElement('button');
+            btn.className = 'nav-btn';
+            btn.id = `btn-${id}`;
+            btn.innerHTML = `📦 ${nombre}`;
+            btn.onclick = (e) => openTab(e, `content-${id}`);
+            nav.appendChild(btn);
+
+            // Crear sección de contenido
+            const main = document.getElementById('main-content');
+            const section = document.createElement('div');
+            section.id = `content-${id}`;
+            section.className = 'tab-content';
+            section.innerHTML = `
+                <h1>Nodo: ${nombre}</h1>
+                <div class="grid">
+                    <div class="card"><h3>Temperatura</h3><p id="temp-${id}">--</p></div>
+                    <div class="card"><h3>Humedad</h3><p id="hum-${id}">--</p></div>
+                    <div class="card"><h3>Último Mensaje</h3><p id="time-${id}" style="font-size:1rem">Esperando...</p></div>
+                </div>
+            `;
+            main.appendChild(section);
             
-            // Guardar en teléfono (Plan Básico)
-            console.log("Dato recibido y guardado localmente:", data.valor);
-        } catch (e) {
-            console.error("Error al procesar JSON", e);
+            // Actualizar contador
+            document.getElementById('counter').innerText = Object.keys(dispositivos).length;
         }
-    });
 
-    client.on('error', (err) => {
-        console.error("Error de conexión:", err);
-        document.getElementById('status').innerText = "❌ ERROR";
-    });
-</script>
+        function actualizarDatosUI(id, data) {
+            if (document.getElementById(`temp-${id}`)) {
+                document.getElementById(`temp-${id}`).innerText = data.temp + "°C";
+                document.getElementById(`hum-${id}`).innerText = data.hum + "%";
+                document.getElementById(`time-${id}`).innerText = new Date().toLocaleTimeString();
+            }
+        }
 
+        function openTab(evt, tabName) {
+            let contents = document.getElementsByClassName("tab-content");
+            for (let i = 0; i < contents.length; i++) contents[i].classList.remove("active");
+            
+            let btns = document.getElementsByClassName("nav-btn");
+            for (let i = 0; i < btns.length; i++) btns[i].classList.remove("active");
+
+            document.getElementById(tabName).classList.add("active");
+            evt.currentTarget.classList.add("active");
+        }
+    </script>
 </body>
 </html>
